@@ -1,27 +1,46 @@
 import pandas as pd
 from tabulate import tabulate
 import os
+from supabase import create_client, Client
 
-# Set the correct folder path where CSV files are stored
-CSV_FOLDER = r"C:\Users\edani\OneDrive\Desktop\עבודה\IDAN Parts agent\A2 test"
+# Supabase configuration from environment variables
+import os
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# Load CSV files with proper encoding
-try:
-    prodinfo_df = pd.read_csv(os.path.join(CSV_FOLDER, "PRODINFO.csv"), encoding="latin1", on_bad_lines="skip", dtype=str)
-    pnc_name_df = pd.read_csv(os.path.join(CSV_FOLDER, "PNC_NAME.csv"), encoding="latin1", on_bad_lines="skip", dtype=str)
-    pninfo_df = pd.read_csv(os.path.join(CSV_FOLDER, "PNINFO.csv"), encoding="latin1", on_bad_lines="skip", dtype=str)
-    pninfo2_df = pd.read_csv(os.path.join(CSV_FOLDER, "PNINFO2.csv"), encoding="latin1", on_bad_lines="skip", dtype=str)
-    model_d_df = pd.read_csv(os.path.join(CSV_FOLDER, "MODEL_D.csv"), encoding="latin1", on_bad_lines="skip", dtype=str)
+# Initialize Supabase client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    # Clean column names (remove hidden characters, uppercase all)
-    for df in [prodinfo_df, pnc_name_df, pninfo_df, pninfo2_df, model_d_df]:
-        df.columns = df.columns.str.strip().str.upper().str.replace("\ufeff", "")
+def load_data_from_supabase():
+    """Load all necessary data from Supabase tables."""
+    try:
+        # Fetch data from Supabase tables using correct table names
+        prodinfo_response = supabase.table("prodinfo").select("*").execute()
+        pnc_name_response = supabase.table("pnc_name").select("*").execute()
+        pninfo_response = supabase.table("pninfo").select("*").execute()
+        pninfo2_response = supabase.table("pninfo2").select("*").execute()
+        model_d_response = supabase.table("modeld").select("*").execute()
 
-    print("✅ All CSV files loaded successfully.")
+        # Convert to dataframes
+        prodinfo_df = pd.DataFrame(prodinfo_response.data)
+        pnc_name_df = pd.DataFrame(pnc_name_response.data)
+        pninfo_df = pd.DataFrame(pninfo_response.data)
+        pninfo2_df = pd.DataFrame(pninfo2_response.data)
+        model_d_df = pd.DataFrame(model_d_response.data)
 
-except Exception as e:
-    print(f"❌ Error loading CSV files: {e}")
-    exit()
+        # Clean column names (ensure uppercase for consistency)
+        for df in [prodinfo_df, pnc_name_df, pninfo_df, pninfo2_df, model_d_df]:
+            df.columns = df.columns.str.strip().str.upper()
+
+        print("✅ All data loaded successfully from Supabase.")
+        return prodinfo_df, pnc_name_df, pninfo_df, pninfo2_df, model_d_df
+
+    except Exception as e:
+        print(f"❌ Error loading data from Supabase: {e}")
+        exit()
+
+# Load all data at startup
+prodinfo_df, pnc_name_df, pninfo_df, pninfo2_df, model_d_df = load_data_from_supabase()
 
 def get_s_code_and_p_date():
     m_code = input("\nEnter M_CODE (Model Code): ").strip().upper()
@@ -34,7 +53,9 @@ def get_s_code_and_p_date():
         s_code = match.iloc[0]["S_CODE"]
         p_date = match.iloc[0]["P_DATE"]
         print("\n✅ Forklift Details Found:")
-        print(match.drop(columns=["SOP_CODE", "OP_CODE", "OP_CODE2", "SOP_CNT", "OP_CNT"]))
+        # Filter out unnecessary columns if they exist
+        display_cols = [col for col in match.columns if col not in ["SOP_CODE", "OP_CODE", "OP_CODE2", "SOP_CNT", "OP_CNT"]]
+        print(match[display_cols])
         return s_code, p_date
 
     print("⚠ No exact match for FRAME_NO. Checking for S_CODE by M_CODE...")
@@ -297,4 +318,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
