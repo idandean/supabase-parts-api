@@ -8,12 +8,23 @@ import os
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+# Helper function to convert columns to string type
+def ensure_string_columns(df, columns):
+    """Convert specified columns to string type to prevent str accessor errors"""
+    for col in columns:
+        if col in df.columns:
+            df[col] = df[col].astype(str)
+    return df
+
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def load_data_from_supabase():
     """Load all necessary data from Supabase tables."""
     try:
+        print(f"Connecting to Supabase... URL configured: {'Yes' if SUPABASE_URL else 'No'}")
+        print(f"API Key configured: {'Yes' if SUPABASE_KEY else 'No'}")
+        
         # Fetch data from Supabase tables using correct table names
         prodinfo_response = supabase.table("prodinfo").select("*").execute()
         pnc_name_response = supabase.table("pnc_name").select("*").execute()
@@ -28,26 +39,44 @@ def load_data_from_supabase():
         pninfo2_df = pd.DataFrame(pninfo2_response.data)
         model_d_df = pd.DataFrame(model_d_response.data)
 
-        # Clean column names (ensure uppercase for consistency)
+        # Print data for debugging
+        print("Data samples received:")
+        print(f"prodinfo rows: {len(prodinfo_df) if not prodinfo_df.empty else 0}")
+        print(f"pnc_name rows: {len(pnc_name_df) if not pnc_name_df.empty else 0}")
+        
+        # Clean column names without using .str accessor
         for df in [prodinfo_df, pnc_name_df, pninfo_df, pninfo2_df, model_d_df]:
-            df.columns = df.columns.str.strip().str.upper()
+            # Convert column names manually
+            df.columns = [str(col).strip().upper() for col in df.columns]
 
         print("✅ All data loaded successfully from Supabase.")
         return prodinfo_df, pnc_name_df, pninfo_df, pninfo2_df, model_d_df
 
     except Exception as e:
         print(f"❌ Error loading data from Supabase: {e}")
+        import traceback
+        print(traceback.format_exc())
         exit()
 
 # Load all data at startup
-prodinfo_df, pnc_name_df, pninfo_df, pninfo2_df, model_d_df = load_data_from_supabase()
+try:
+    prodinfo_df, pnc_name_df, pninfo_df, pninfo2_df, model_d_df = load_data_from_supabase()
+except Exception as e:
+    print(f"Failed to load initial data: {e}")
+    import traceback
+    print(traceback.format_exc())
+    exit()
 
 def get_s_code_and_p_date():
     m_code = input("\nEnter M_CODE (Model Code): ").strip().upper()
     frame_no = input("Enter FRAME_NO (Serial Number): ").strip()
 
+    # Convert columns to string type to prevent .str accessor errors
+    ensure_string_columns(prodinfo_df, ["M_CODE", "FRAME_NO"])
+    
     # Check for exact match (M_CODE + FRAME_NO)
-    match = prodinfo_df[(prodinfo_df["M_CODE"].str.upper() == m_code) & (prodinfo_df["FRAME_NO"].str.upper() == frame_no)]
+    match = prodinfo_df[(prodinfo_df["M_CODE"].str.upper() == m_code) & 
+                        (prodinfo_df["FRAME_NO"].str.upper() == frame_no)]
 
     if not match.empty:
         s_code = match.iloc[0]["S_CODE"]
@@ -100,6 +129,9 @@ def get_pnc():
     }
     
     part_name = input("\nEnter the type of part you need (e.g., Radiator Assy, Cooling System): ").strip().upper()
+    
+    # Ensure DESC_ENG column is string type
+    ensure_string_columns(pnc_name_df, ["DESC_ENG"])
     
     # First check for exact match
     match = pnc_name_df[pnc_name_df["DESC_ENG"].str.upper() == part_name]
@@ -156,6 +188,10 @@ def get_pnc():
     return None
 
 def get_part_no(s_code, p_date, pnc):
+    # Convert columns to string type before using str methods
+    ensure_string_columns(pninfo_df, ["S_CODE", "PNC"])
+    ensure_string_columns(pninfo2_df, ["S_CODE", "PNC"])
+    
     matches_pninfo = pninfo_df[
         (pninfo_df["S_CODE"].str.upper() == s_code) &
         (pninfo_df["PNC"].str.upper() == pnc) &
@@ -201,6 +237,9 @@ def suggest_alternative_parts(pnc):
         
     # Get first 4 digits of PNC
     pnc_prefix = pnc[:4]
+    
+    # Ensure PNC column is string type
+    ensure_string_columns(pnc_name_df, ["PNC"])
     
     # Find all parts with same PNC prefix
     similar_parts = pnc_name_df[pnc_name_df["PNC"].str.startswith(pnc_prefix)]
@@ -281,6 +320,10 @@ def process_part_lookup_result(part_nos, s_code=None, p_date=None):
 
 def main():
     print("\n🔹 WELCOME TO THE AI FORKLIFT PARTS SEARCH 🔹\n")
+    
+    # Add debug info about environment
+    print(f"Supabase URL configured: {'Yes' if SUPABASE_URL else 'No'}")
+    print(f"Supabase Key configured: {'Yes' if SUPABASE_KEY else 'No (length: 0)'}")
     
     while True:
         print("\nChoose search method:")
