@@ -3,3 +3,5 @@ uvicorn
 supabase
 pandas
 tabulate
+supabase-py
+python-dotenv  # For local development
